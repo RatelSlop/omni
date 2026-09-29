@@ -15,6 +15,9 @@ import {
   Check,
   LogOut,
   RefreshCw,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useOmniStore } from "@/lib/store/useOmniStore";
 
@@ -39,7 +42,16 @@ export function LoginModal({ isOpen: propIsOpen, onClose: propOnClose }: LoginMo
   };
 
   const [mounted, setMounted] = useState(false);
-  const [tab, setTab] = useState<"bookmarklet" | "token" | "demo">("bookmarklet");
+  const [tab, setTab] = useState<"direct" | "bookmarklet" | "token" | "demo">("direct");
+
+  // Direct Login Form State
+  const [directSchool, setDirectSchool] = useState("");
+  const [directUsername, setDirectUsername] = useState("");
+  const [directPassword, setDirectPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [directError, setDirectError] = useState("");
+  const [directSuccess, setDirectSuccess] = useState(false);
 
   // Manual Token State
   const [manualToken, setManualToken] = useState("");
@@ -75,6 +87,54 @@ export function LoginModal({ isOpen: propIsOpen, onClose: propOnClose }: LoginMo
 
   // Console code snippet to copy with 1 click
   const consoleSnippet = `(function(){var k=Object.keys(sessionStorage).find(x=>x.includes('oidc.user'))||Object.keys(localStorage).find(x=>x.includes('oidc.user'));var d=JSON.parse(sessionStorage.getItem(k)||localStorage.getItem(k));console.log('--- KOPIEER DIT TOKEN ONDERIN: ---');console.log(d.access_token);copy(d.access_token);alert('Token automatisch naar je klembord gekopieerd! Plak het nu in Omni.');})();`;
+
+  const handleDirectLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDirectError("");
+    setDirectSuccess(false);
+
+    const school = directSchool.trim().replace(".magister.net", "").toLowerCase();
+    const username = directUsername.trim();
+    const password = directPassword;
+
+    if (!school || !username || !password) {
+      setDirectError("Vul alle velden in: school, gebruikersnaam en wachtwoord.");
+      return;
+    }
+
+    setIsLoggingIn(true);
+    try {
+      const res = await fetch("/api/magister/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ school, username, password }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Inloggen mislukt. Controleer je gegevens.");
+      }
+
+      saveSession({
+        accessToken: data.accessToken,
+        expiresAt: data.expiresAt || Date.now() + 86400000 * 7,
+        schoolUrl: data.schoolUrl || `${school}.magister.net`,
+        studentName: data.studentName || "Magister Leerling",
+        studentId: data.studentId,
+        isDemo: false,
+      });
+
+      setDirectSuccess(true);
+      setTimeout(() => {
+        reload();
+        handleClose();
+      }, 900);
+    } catch (err: any) {
+      setDirectError(err.message || "Kon niet inloggen bij Magister.");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   const handleCopyConsoleSnippet = () => {
     navigator.clipboard.writeText(consoleSnippet);
@@ -151,10 +211,6 @@ export function LoginModal({ isOpen: propIsOpen, onClose: propOnClose }: LoginMo
     handleClose();
   };
 
-  const handleDisconnect = () => {
-    handleResetToDemo();
-  };
-
   const modalContent = (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
@@ -208,7 +264,7 @@ export function LoginModal({ isOpen: propIsOpen, onClose: propOnClose }: LoginMo
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
               <button
-                onClick={handleDisconnect}
+                onClick={handleResetToDemo}
                 title="Verbinding verbreken"
                 className="px-2.5 py-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 font-semibold transition-colors flex items-center gap-1 text-[11px]"
               >
@@ -220,40 +276,151 @@ export function LoginModal({ isOpen: propIsOpen, onClose: propOnClose }: LoginMo
         )}
 
         {/* Tabs */}
-        <div className="flex rounded-2xl border border-border p-1 bg-accent/40 text-xs font-bold">
+        <div className="flex rounded-2xl border border-border p-1 bg-accent/40 text-xs font-bold gap-1 overflow-x-auto">
+          <button
+            onClick={() => setTab("direct")}
+            className={`flex-1 py-2 px-2.5 rounded-xl transition-all whitespace-nowrap ${
+              tab === "direct"
+                ? "bg-indigo-500 text-white shadow-sm"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            🚀 Direct Inloggen
+          </button>
           <button
             onClick={() => setTab("bookmarklet")}
-            className={`flex-1 py-2 rounded-xl transition-all ${
+            className={`flex-1 py-2 px-2.5 rounded-xl transition-all whitespace-nowrap ${
               tab === "bookmarklet"
                 ? "bg-indigo-500 text-white shadow-sm"
                 : "text-muted hover:text-foreground"
             }`}
           >
-            ⚡ 1-Klik Koppelen
+            ⚡ 1-Klik Knop
           </button>
           <button
             onClick={() => setTab("token")}
-            className={`flex-1 py-2 rounded-xl transition-all ${
+            className={`flex-1 py-2 px-2.5 rounded-xl transition-all whitespace-nowrap ${
               tab === "token"
                 ? "bg-indigo-500 text-white shadow-sm"
                 : "text-muted hover:text-foreground"
             }`}
           >
-            🔑 Token / Handmatig
+            🔑 Token
           </button>
           <button
             onClick={() => setTab("demo")}
-            className={`flex-1 py-2 rounded-xl transition-all ${
+            className={`flex-1 py-2 px-2.5 rounded-xl transition-all whitespace-nowrap ${
               tab === "demo"
                 ? "bg-indigo-500 text-white shadow-sm"
                 : "text-muted hover:text-foreground"
             }`}
           >
-            ✨ Demo Modus
+            ✨ Demo
           </button>
         </div>
 
-        {/* TAB 1: 1-KLIK BLADWIJZER */}
+        {/* TAB 1: DIRECT LOGIN (SCHOOL + USERNAME + PASSWORD) */}
+        {tab === "direct" && (
+          <form onSubmit={handleDirectLogin} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted uppercase tracking-wider block">
+                Jouw Schoolnaam
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  value={directSchool}
+                  onChange={(e) => setDirectSchool(e.target.value)}
+                  placeholder="bijv: calvijn, pierson of singelland"
+                  className="w-full rounded-xl border border-border bg-accent/30 px-4 py-2.5 text-xs text-foreground placeholder:text-muted focus:outline-none focus:border-indigo-500"
+                />
+                <span className="absolute right-3 top-2.5 text-xs text-muted pointer-events-none">
+                  .magister.net
+                </span>
+              </div>
+              <p className="text-[10px] text-muted">
+                Tip: Dit is het beginstukje van je normale Magister-link.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted uppercase tracking-wider block">
+                Gebruikersnaam of Leerlingnummer
+              </label>
+              <input
+                type="text"
+                required
+                value={directUsername}
+                onChange={(e) => setDirectUsername(e.target.value)}
+                placeholder="bijv: 123456 of j.jansen"
+                className="w-full rounded-xl border border-border bg-accent/30 px-4 py-2.5 text-xs text-foreground placeholder:text-muted focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted uppercase tracking-wider block">
+                Wachtwoord
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={directPassword}
+                  onChange={(e) => setDirectPassword(e.target.value)}
+                  placeholder="Je Magister wachtwoord"
+                  className="w-full rounded-xl border border-border bg-accent/30 px-4 py-2.5 text-xs text-foreground placeholder:text-muted focus:outline-none focus:border-indigo-500 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2.5 text-muted hover:text-foreground transition-colors"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {directError && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 text-red-500 text-xs font-medium">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{directError}</span>
+              </div>
+            )}
+
+            {directSuccess && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 text-emerald-500 text-xs font-medium">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>Succesvol ingelogd! Je actuele rooster & cijfers worden geladen...</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoggingIn || !directSchool.trim() || !directUsername.trim() || !directPassword}
+              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all hover:scale-[1.01]"
+            >
+              {isLoggingIn ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Bezig met veilig inloggen bij Magister...</span>
+                </>
+              ) : (
+                <>
+                  <KeyRound className="h-4 w-4" />
+                  <span>Inloggen bij Magister</span>
+                </>
+              )}
+            </button>
+
+            <div className="flex items-center gap-2 text-[11px] text-muted pt-2 border-t border-border">
+              <Shield className="h-4 w-4 text-emerald-500 shrink-0" />
+              <span>100% lokaal & privé: je gegevens worden veilig verwerkt en alleen op je eigen apparaat opgeslagen.</span>
+            </div>
+          </form>
+        )}
+
+        {/* TAB 2: 1-KLIK BLADWIJZER */}
         {tab === "bookmarklet" && (
           <div className="space-y-4">
             <div className="p-4 rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10 space-y-3">
@@ -303,12 +470,12 @@ export function LoginModal({ isOpen: propIsOpen, onClose: propOnClose }: LoginMo
 
             <div className="flex items-center gap-2 text-[11px] text-muted pt-2 border-t border-border">
               <Shield className="h-4 w-4 text-emerald-500 shrink-0" />
-              <span>100% veilig & lokaal: je inloggegevens blijven enkel in je eigen browser opgeslagen.</span>
+              <span>Ideaal voor scholen met verplichte 2FA of Microsoft Authenticator.</span>
             </div>
           </div>
         )}
 
-        {/* TAB 2: MANUAL TOKEN IMPORT */}
+        {/* TAB 3: MANUAL TOKEN IMPORT */}
         {tab === "token" && (
           <form onSubmit={handleSaveManualToken} className="space-y-4">
             <div className="space-y-1.5">
@@ -374,7 +541,7 @@ export function LoginModal({ isOpen: propIsOpen, onClose: propOnClose }: LoginMo
             {/* Quick 1-click console copy helper */}
             <div className="rounded-2xl border border-border bg-accent/40 p-3.5 text-[11px] text-muted space-y-2">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-foreground">Snelste manier: via Console (F12)</span>
+                <span className="font-bold text-foreground">Snelste manier via Console (F12)</span>
                 <button
                   type="button"
                   onClick={handleCopyConsoleSnippet}
@@ -391,7 +558,7 @@ export function LoginModal({ isOpen: propIsOpen, onClose: propOnClose }: LoginMo
           </form>
         )}
 
-        {/* TAB 3: DEMO */}
+        {/* TAB 4: DEMO */}
         {tab === "demo" && (
           <div className="space-y-4 text-center py-4">
             <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center mx-auto">
