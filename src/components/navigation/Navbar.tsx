@@ -18,12 +18,10 @@ import {
   EyeOff,
 } from "lucide-react";
 import { useOmniStore } from "@/lib/store/useOmniStore";
-import { LoginModal } from "@/components/auth/LoginModal";
 
 export function Navbar() {
   const pathname = usePathname();
-  const { settings, updateSettings, session } = useOmniStore();
-  const [isLoginOpen, setIsLoginOpen] = React.useState(false);
+  const { settings, updateSettings, session, openLoginModal } = useOmniStore();
 
   const navItems = [
     { href: "/", label: "Vandaag", icon: Zap },
@@ -152,7 +150,7 @@ export function Navbar() {
 
           {/* Account status badge */}
           <button
-            onClick={() => setIsLoginOpen(true)}
+            onClick={() => openLoginModal()}
             title="Klik om Magister-account te koppelen of beheren"
             className="flex items-center gap-1.5 pl-2 border-l border-border text-xs hover:opacity-80 transition-opacity"
           >
@@ -167,9 +165,6 @@ export function Navbar() {
           </button>
         </div>
       </div>
-
-      {/* Login Modal */}
-      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
 
       {/* Mobile bottom nav */}
       <div className="md:hidden border-t border-border flex items-center justify-around py-2 px-1 bg-background/95">

@@ -28,17 +28,19 @@ export default function InstellingenPage() {
     appointments,
     setSubjectColor,
     setSubjectName,
+    openLoginModal,
   } = useOmniStore();
 
   const [copiedFeed, setCopiedFeed] = useState(false);
   const [customKeyInput, setCustomKeyInput] = useState(settings.ai.geminiApiKey || "");
-  const [schoolInput, setSchoolInput] = useState(session?.schoolUrl || "");
   const [saveStatus, setSaveStatus] = useState(false);
 
   const webcalUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/api/calendar/feed?demo=true`
-      : "https://omniweb.ratelslop.studio/api/calendar/feed";
+      ? session?.isDemo
+        ? `${window.location.origin}/api/calendar/feed?demo=true`
+        : `${window.location.origin}/api/calendar/feed?token=${encodeURIComponent(session?.accessToken || "")}&tenant=${encodeURIComponent(session?.schoolUrl || "")}`
+      : "https://omniweb.schoolnaam.nl/api/calendar/feed";
 
   const handleCopyWebcal = () => {
     navigator.clipboard.writeText(webcalUrl);
@@ -71,25 +73,14 @@ export default function InstellingenPage() {
     setTimeout(() => setSaveStatus(false), 2000);
   };
 
-  const handleDemoToggle = () => {
-    if (session?.isDemo) {
-      // Prompt for school
-      saveSession({
-        accessToken: "",
-        expiresAt: 0,
-        schoolUrl: schoolInput || "mijn-school.magister.net",
-        studentName: "Magister Leerling",
-        isDemo: false,
-      });
-    } else {
-      saveSession({
-        accessToken: "demo-token",
-        expiresAt: Date.now() + 86400000,
-        schoolUrl: "demo.magister.net",
-        studentName: "Daan van der Meer",
-        isDemo: true,
-      });
-    }
+  const handleResetToDemo = () => {
+    saveSession({
+      accessToken: "demo-token",
+      expiresAt: Date.now() + 86400000,
+      schoolUrl: "demo.magister.net",
+      studentName: "Daan van der Meer",
+      isDemo: true,
+    });
   };
 
   return (
@@ -301,24 +292,42 @@ export default function InstellingenPage() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-accent/40">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-border bg-accent/40">
           <div>
-            <div className="font-bold text-sm text-foreground">
-              {session?.isDemo ? "Demo Account Actief" : "Live Magister Account"}
+            <div className="flex items-center gap-2">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  session?.isDemo ? "bg-amber-500" : "bg-emerald-500"
+                } animate-pulse`}
+              />
+              <span className="font-bold text-sm text-foreground">
+                {session?.isDemo ? "Demo Account Actief" : session?.studentName || "Live Magister Account"}
+              </span>
             </div>
-            <p className="text-xs text-muted">
+            <p className="text-xs text-muted mt-1">
               {session?.isDemo
-                ? "Je bekijkt nu realistische voorbeelddata (cijfers, rooster en uitval)."
-                : `Gekoppeld aan ${session?.schoolUrl}`}
+                ? "Je bekijkt nu realistische voorbeelddata (cijfers, rooster en lesuitval)."
+                : `Gekoppeld aan school: ${session?.schoolUrl}`}
             </p>
           </div>
 
-          <button
-            onClick={handleDemoToggle}
-            className="px-3.5 py-2 rounded-xl border border-border bg-background hover:bg-accent text-xs font-bold text-foreground transition-all"
-          >
-            {session?.isDemo ? "Wissel naar Live Login" : "Herstel Demo Account"}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => openLoginModal()}
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+            >
+              <span>{session?.isDemo ? "⚡ Magister Koppelen" : "Ander Account Koppelen"}</span>
+            </button>
+
+            {!session?.isDemo && (
+              <button
+                onClick={handleResetToDemo}
+                className="px-3.5 py-2 rounded-xl border border-border bg-background hover:bg-accent text-xs font-semibold text-muted hover:text-foreground transition-all"
+              >
+                Wissel naar Demo
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

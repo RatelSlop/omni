@@ -18,7 +18,7 @@ import {
 import { createGoogleCalendarUrl } from "@/lib/calendar/ical";
 
 export default function RoosterPage() {
-  const { appointments, settings } = useOmniStore();
+  const { appointments, settings, session } = useOmniStore();
   const [selectedDayOffset, setSelectedDayOffset] = useState<number>(0);
   const [copiedFeed, setCopiedFeed] = useState(false);
 
@@ -50,7 +50,10 @@ export default function RoosterPage() {
     new Date(iso).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
 
   const copyWebcalLink = () => {
-    const url = `${window.location.origin}/api/calendar/feed?demo=true`;
+    const isDemo = session?.isDemo ?? true;
+    const url = isDemo
+      ? `${window.location.origin}/api/calendar/feed?demo=true`
+      : `${window.location.origin}/api/calendar/feed?token=${encodeURIComponent(session?.accessToken || "")}&tenant=${encodeURIComponent(session?.schoolUrl || "")}`;
     navigator.clipboard.writeText(url);
     setCopiedFeed(true);
     setTimeout(() => setCopiedFeed(false), 2500);

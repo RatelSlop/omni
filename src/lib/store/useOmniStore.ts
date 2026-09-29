@@ -1,9 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { MagisterAppointment, MagisterGrade, MagisterHomework, MagisterSession } from "../types/magister";
+import { create } from "zustand";
+import {
+  MagisterAppointment,
+  MagisterGrade,
+  MagisterHomework,
+  MagisterSession,
+} from "../types/magister";
 import { OmniSettings } from "../types/settings";
-import { getMockAppointments, getMockGrades, getMockHomework } from "../magister/mockData";
+import {
+  getMockAppointments,
+  getMockGrades,
+  getMockHomework,
+} from "../magister/mockData";
 import { MagisterClient } from "../magister/client";
 
 const SETTINGS_KEY = "omni_settings_v1";
@@ -31,72 +40,105 @@ const defaultSettings: OmniSettings = {
   defaultCalendarView: "day",
 };
 
-export function useOmniStore() {
-  const [mounted, setMounted] = useState(false);
-  const [session, setSession] = useState<MagisterSession | null>(null);
-  const [settings, setSettings] = useState<OmniSettings>(defaultSettings);
-  const [appointments, setAppointments] = useState<MagisterAppointment[]>([]);
-  const [grades, setGrades] = useState<MagisterGrade[]>([]);
-  const [homework, setHomework] = useState<MagisterHomework[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+const defaultDemoSession: MagisterSession = {
+  accessToken: "demo-token",
+  expiresAt: Date.now() + 86400000,
+  schoolUrl: "demo.magister.net",
+  studentName: "Daan van der Meer",
+  isDemo: true,
+};
 
-  // Initialize from LocalStorage
-  useEffect(() => {
+interface OmniStoreState {
+  mounted: boolean;
+  isLoginModalOpen: boolean;
+  session: MagisterSession | null;
+  settings: OmniSettings;
+  appointments: MagisterAppointment[];
+  grades: MagisterGrade[];
+  homework: MagisterHomework[];
+  isLoading: boolean;
+
+  // Actions
+  initialize: () => void;
+  openLoginModal: () => void;
+  closeLoginModal: () => void;
+  setLoginModalOpen: (open: boolean) => void;
+  updateSettings: (newSettings: Partial<OmniSettings>) => void;
+  saveSession: (newSession: MagisterSession | null) => void;
+  toggleHomework: (id: number) => void;
+  setSubjectColor: (code: string, color: string) => void;
+  setSubjectName: (code: string, customName: string) => void;
+  reload: () => Promise<void>;
+}
+
+export const useOmniStore = create<OmniStoreState>((set, get) => ({
+  mounted: false,
+  isLoginModalOpen: false,
+  session: null,
+  settings: defaultSettings,
+  appointments: [],
+  grades: [],
+  homework: [],
+  isLoading: true,
+
+  openLoginModal: () => set({ isLoginModalOpen: true }),
+  closeLoginModal: () => set({ isLoginModalOpen: false }),
+  setLoginModalOpen: (open: boolean) => set({ isLoginModalOpen: open }),
+
+  initialize: () => {
+    if (typeof window === "undefined") return;
+
+    let loadedSettings = defaultSettings;
     try {
       const storedSettings = localStorage.getItem(SETTINGS_KEY);
       if (storedSettings) {
-        setSettings({ ...defaultSettings, ...JSON.parse(storedSettings) });
-      }
-
-      const storedSession = localStorage.getItem(SESSION_KEY);
-      if (storedSession) {
-        const parsed = JSON.parse(storedSession);
-        setSession(parsed);
-      } else {
-        // Default to demo session so the app is instantly rich and interactive!
-        const demoSession: MagisterSession = {
-          accessToken: "demo-token",
-          expiresAt: Date.now() + 86400000,
-          schoolUrl: "demo.magister.net",
-          studentName: "Daan van der Meer",
-          isDemo: true,
-        };
-        setSession(demoSession);
+        loadedSettings = { ...defaultSettings, ...JSON.parse(storedSettings) };
       }
     } catch (e) {
-      console.error("Local storage error:", e);
+      console.error("Fout bij laden settings:", e);
     }
-    setMounted(true);
-  }, []);
 
-  // Sync data when session changes
-  useEffect(() => {
-    if (!mounted) return;
-    loadData();
-  }, [mounted, session]);
+    let loadedSession: MagisterSession = defaultDemoSession;
+    try {
+      const storedSession = localStorage.getItem(SESSION_KEY);
+      if (storedSession) {
+        loadedSession = JSON.parse(storedSession);
+      } else {
+        localStorage.setItem(SESSION_KEY, JSON.stringify(defaultDemoSession));
+      }
+    } catch (e) {
+      console.error("Fout bij laden session:", e);
+    }
 
-  // Apply theme class to document
-  useEffect(() => {
-    if (!mounted) return;
+    // Apply theme to HTML tag
     const root = document.documentElement;
     root.classList.remove("dark", "oled");
-
-    if (settings.theme === "dark") {
+    if (loadedSettings.theme === "dark" || loadedSettings.theme === "oled") {
       root.classList.add("dark");
-    } else if (settings.theme === "oled") {
-      root.classList.add("dark", "oled");
     }
-  }, [mounted, settings.theme]);
+    if (loadedSettings.theme === "oled") {
+      root.classList.add("oled");
+    }
 
-  const loadData = async () => {
-    setIsLoading(true);
+    set({
+      mounted: true,
+      settings: loadedSettings,
+      session: loadedSession,
+    });
+
+    get().reload();
+  },
+
+  reload: async () => {
+    set({ isLoading: true });
+    const { session } = get();
+
     const client = new MagisterClient({
       accessToken: session?.accessToken,
       schoolTenant: session?.schoolUrl,
       isDemo: session?.isDemo ?? true,
     });
 
-    const now = new Date();
     const past = new Date();
     past.setDate(past.getDate() - 3);
     const future = new Date();
@@ -109,36 +151,59 @@ export function useOmniStore() {
         client.getHomework(),
       ]);
 
-      // Merge saved completed statuses
-      const hwStatuses = JSON.parse(localStorage.getItem(HOMEWORK_STATUS_KEY) || "{}");
+      let hwStatuses: Record<number, boolean> = {};
+      try {
+        hwStatuses = JSON.parse(localStorage.getItem(HOMEWORK_STATUS_KEY) || "{}");
+      } catch (e) {
+        console.error("Fout bij ophalen huiswerk statuses:", e);
+      }
+
       const mergedHw = hw.map((h) => ({
         ...h,
         voltooid: hwStatuses[h.id] ?? h.voltooid,
       }));
 
-      setAppointments(appts);
-      setGrades(grds);
-      setHomework(mergedHw);
+      set({
+        appointments: appts,
+        grades: grds,
+        homework: mergedHw,
+        isLoading: false,
+      });
     } catch (err) {
-      console.error("Error loading data:", err);
-      setAppointments(getMockAppointments());
-      setGrades(getMockGrades());
-      setHomework(getMockHomework());
-    } finally {
-      setIsLoading(false);
+      console.error("Error loading Magister data:", err);
+      set({
+        appointments: getMockAppointments(),
+        grades: getMockGrades(),
+        homework: getMockHomework(),
+        isLoading: false,
+      });
     }
-  };
+  },
 
-  const updateSettings = (newSettings: Partial<OmniSettings>) => {
-    const updated = { ...settings, ...newSettings };
-    setSettings(updated);
+  updateSettings: (newSettings: Partial<OmniSettings>) => {
+    const current = get().settings;
+    const updated = { ...current, ...newSettings };
+    set({ settings: updated });
+
     if (typeof window !== "undefined") {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
-    }
-  };
 
-  const saveSession = (newSession: MagisterSession | null) => {
-    setSession(newSession);
+      // Update theme classes
+      if (newSettings.theme) {
+        const root = document.documentElement;
+        root.classList.remove("dark", "oled");
+        if (newSettings.theme === "dark" || newSettings.theme === "oled") {
+          root.classList.add("dark");
+        }
+        if (newSettings.theme === "oled") {
+          root.classList.add("oled");
+        }
+      }
+    }
+  },
+
+  saveSession: (newSession: MagisterSession | null) => {
+    set({ session: newSession });
     if (typeof window !== "undefined") {
       if (newSession) {
         localStorage.setItem(SESSION_KEY, JSON.stringify(newSession));
@@ -146,22 +211,34 @@ export function useOmniStore() {
         localStorage.removeItem(SESSION_KEY);
       }
     }
-  };
+    get().reload();
+  },
 
-  const toggleHomework = (id: number) => {
-    setHomework((prev) => {
-      const next = prev.map((h) => (h.id === id ? { ...h, voltooid: !h.voltooid } : h));
-      const hwStatuses = JSON.parse(localStorage.getItem(HOMEWORK_STATUS_KEY) || "{}");
-      const target = next.find((h) => h.id === id);
-      if (target) {
-        hwStatuses[id] = target.voltooid;
-        localStorage.setItem(HOMEWORK_STATUS_KEY, JSON.stringify(hwStatuses));
+  toggleHomework: (id: number) => {
+    const currentHw = get().homework;
+    const next = currentHw.map((h) =>
+      h.id === id ? { ...h, voltooid: !h.voltooid } : h
+    );
+    set({ homework: next });
+
+    if (typeof window !== "undefined") {
+      try {
+        const hwStatuses = JSON.parse(
+          localStorage.getItem(HOMEWORK_STATUS_KEY) || "{}"
+        );
+        const target = next.find((h) => h.id === id);
+        if (target) {
+          hwStatuses[id] = target.voltooid;
+          localStorage.setItem(HOMEWORK_STATUS_KEY, JSON.stringify(hwStatuses));
+        }
+      } catch (e) {
+        console.error("Fout bij opslaan huiswerk status:", e);
       }
-      return next;
-    });
-  };
+    }
+  },
 
-  const setSubjectColor = (code: string, color: string) => {
+  setSubjectColor: (code: string, color: string) => {
+    const { settings, updateSettings } = get();
     const current = settings.subjectCustomizations[code] || { color };
     updateSettings({
       subjectCustomizations: {
@@ -169,31 +246,18 @@ export function useOmniStore() {
         [code]: { ...current, color },
       },
     });
-  };
+  },
 
-  const setSubjectName = (code: string, customName: string) => {
-    const current = settings.subjectCustomizations[code] || { color: "#6366f1" };
+  setSubjectName: (code: string, customName: string) => {
+    const { settings, updateSettings } = get();
+    const current = settings.subjectCustomizations[code] || {
+      color: "#6366f1",
+    };
     updateSettings({
       subjectCustomizations: {
         ...settings.subjectCustomizations,
         [code]: { ...current, customName },
       },
     });
-  };
-
-  return {
-    mounted,
-    session,
-    settings,
-    appointments,
-    grades,
-    homework,
-    isLoading,
-    updateSettings,
-    saveSession,
-    toggleHomework,
-    setSubjectColor,
-    setSubjectName,
-    reload: loadData,
-  };
-}
+  },
+}));

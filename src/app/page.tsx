@@ -9,6 +9,7 @@ import { RefreshCw, Sparkles } from "lucide-react";
 export default function HomePage() {
   const {
     mounted,
+    session,
     settings,
     appointments,
     grades,
@@ -16,6 +17,7 @@ export default function HomePage() {
     isLoading,
     toggleHomework,
     reload,
+    openLoginModal,
   } = useOmniStore();
 
   if (!mounted) {
@@ -64,6 +66,24 @@ export default function HomePage() {
           </button>
         </div>
       </div>
+
+      {/* Demo Banner with direct Koppel Knop */}
+      {session?.isDemo && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-transparent">
+          <div className="flex items-center gap-3">
+            <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+            <p className="text-xs text-foreground/90">
+              <span className="font-bold">Je bekijkt nu de interactieve demo van Omni.</span> Koppel je eigen Magister schoolaccount om je actuele rooster, lesuitval en cijfers in te laden.
+            </p>
+          </div>
+          <button
+            onClick={() => openLoginModal()}
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-sm transition-all shrink-0 flex items-center gap-1.5"
+          >
+            <span>⚡ Magister Koppelen</span>
+          </button>
+        </div>
+      )}
 
       {/* Main Switchable Dashboard: Linear vs Bento */}
       {settings.layoutStyle === "bento" ? (
