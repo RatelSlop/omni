@@ -104,7 +104,7 @@ export function LoginModal({ isOpen: propIsOpen, onClose: propOnClose }: LoginMo
 
     setIsLoggingIn(true);
     try {
-      const res = await fetch("/api/magister/auth/login", {
+      const res = await fetch("/api/auth/magister-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ school, username, password }),

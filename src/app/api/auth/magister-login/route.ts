@@ -264,7 +264,6 @@ export async function POST(req: NextRequest) {
       accessToken = params.get("access_token") || "";
     }
 
-    // If not in location header, try checking Set-Cookie or callback page body
     if (!accessToken) {
       const match = callbackRes.data.match(/access_token=([a-zA-Z0-9._-]+)/);
       if (match) {
